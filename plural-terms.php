@@ -3,17 +3,23 @@
 Plugin Name: Plural Terms
 Plugin URI: 
 Description: Provides API to add plural field to your taxonomy terms.
-Version: 0.0.1
+Version: 0.0.2
 Author: Seamus Leahy
 Author URI: http://seamusleahy.com
 License: MIT
 */
 
+// Depends upon wp-large-options when running on VIP
+if( function_exists('wpcom_vip_load_plugin') ) {
+	wpcom_vip_load_plugin( 'wp-large-options' );
+}
 
 class Plural_Terms {
 
 	var $taxonomies = array();
 	var $registered = array();
+
+	const KEY = 'plural_terms';
 
 	function __construct() {
 		global $pagenow;
@@ -66,39 +72,69 @@ class Plural_Terms {
 	}
 
 
-	/**
-	 * Generate the option key from the term ID
-	 */
-	function option_key( $term_id ) {
-		return "plural_term_name_{$term_id}";
-	}
-
 
 	/**
 	 * Hook callback for saving the term
 	 */
 	function update_term( $term_id, $tt_id, $taxonomy ) {
-		$val = empty( $_POST['plural_term_name'] ) ? '' : $_POST['plural_term_name'];
-		update_option( $this->option_key( $term_id ), $val );
+		$data = $this->get_data();
+		$data[$term_id] = empty( $_POST['plural_term_name'] ) ? '' : $_POST['plural_term_name'];
+
+
+		if( function_exists('wlo_update_option') ) {
+			// update does not properly add the post if it doesn't already exists
+			if( !wlo_add_option( self::KEY, $data ) ) {
+				wlo_update_option( self::KEY, $data );
+			}
+		} else {
+			update_option( self::KEY, $data );
+		}
 	}
 
 
 	/**
 	 * Get the plural name for a term if any
 	 */
-	function get_plural_name( $term ) {
-		if( is_numeric($term) ) {
-			$term_id = $term;
-		} else {
-			$term_id = $term->term_id;
+	function get_plural_name( $term_id ) {
+		$data = $this->get_data();
+		$term_id = $this->get_term_id( $term_id );
+		return array_key_exists( $term_id, $data ) ? $data[$term_id] : '';		
+	}
+
+
+	/**
+	 * Get the stored data
+	 */
+	protected function get_data() {
+		if( empty( $this->data ) ) {
+			if( function_exists('wlo_get_option') ) {
+				$this->data = wlo_get_option( self::KEY, array() );
+			} else {
+				$this->data = get_option( self::KEY, array() );
+			}
 		}
 
-		return get_option( $this->option_key( $term_id ) );
+		return $this->data;
+	} 
+
+
+	/**
+	 * Get the term ID where $term is either a term object or an ID
+	 */
+	protected function get_term_id( $term ) {
+		if( is_object( $term ) ) {
+			return $term->term_id;
+		} else {
+			(int) $term;
+		}
 	}
 }
 
 global $plural_terms;
 $plural_terms = new Plural_Terms();
+
+
+
 
 //
 // Global API
